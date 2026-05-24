@@ -49,14 +49,13 @@ jobs:
       - name: Run architecture, frontend safety, and smoothness checks
         run: |
           mkdir -p nightly-reports
-          ./gradlew clean lintDebug testDebugUnitTest assembleDebug --no-daemon | tee nightly-reports/quality-and-build.log
+          ./gradlew clean lintDebug assembleDebug --no-daemon | tee nightly-reports/quality-and-build.log
 
       - name: Run persona-based user simulation checks
         run: |
-          ./gradlew testDebugUnitTest \
-            --tests "*ExampleRobolectricTest*" \
-            --tests "*GreetingScreenshotTest*" \
-            --no-daemon | tee nightly-reports/persona-simulation.log
+          ./gradlew testDebugUnitTest --no-daemon | tee nightly-reports/persona-simulation.log
+          grep -R "com.example.ExampleRobolectricTest" app/build/test-results/testDebugUnitTest
+          grep -R "com.example.GreetingScreenshotTest" app/build/test-results/testDebugUnitTest
 
       - name: Upload workflow verification artifacts
         if: always()
@@ -105,7 +104,7 @@ jobs:
             const prResp = await github.rest.pulls.get({ owner, repo, pull_number });
             const headSha = prResp.data.head.sha;
 
-            const maxAttempts = 30; // up to 15 minutes
+            const maxAttempts = 30; // 30 attempts × 30s = 15 minutes max
             const waitMs = 30_000;
             let allChecksPassed = false;
 
