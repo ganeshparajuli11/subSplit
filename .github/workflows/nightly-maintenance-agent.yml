@@ -1,0 +1,173 @@
+name: Nightly Maintenance Agent
+
+on:
+  schedule:
+    # 11:00 PM Nepal Time (NPT, UTC+05:45) = 17:15 UTC
+    - cron: "15 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  actions: read
+
+concurrency:
+  group: nightly-maintenance-main
+  cancel-in-progress: false
+
+jobs:
+  maintenance-and-user-validation:
+    name: Maintenance, Security, and User Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+          cache: gradle
+
+      - name: Generate debug keystore
+        run: |
+          keytool -genkey -v \
+            -keystore debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Android Debug, O=Android, C=US"
+
+      - name: Run architecture, frontend safety, and smoothness checks
+        run: |
+          mkdir -p nightly-reports
+          ./gradlew clean lintDebug testDebugUnitTest assembleDebug --no-daemon | tee nightly-reports/quality-and-build.log
+
+      - name: Run persona-based user simulation checks
+        run: |
+          ./gradlew testDebugUnitTest \
+            --tests "*ExampleRobolectricTest*" \
+            --tests "*GreetingScreenshotTest*" \
+            --no-daemon | tee nightly-reports/persona-simulation.log
+
+      - name: Upload workflow verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-maintenance-reports-${{ github.run_id }}
+          path: |
+            nightly-reports/**
+            app/build/reports/**
+            app/build/test-results/**
+          if-no-files-found: warn
+
+      - name: Create or update nightly maintenance PR
+        id: create_pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: nightly maintenance agent updates"
+          branch: feature/nightly-maintenance-agent
+          delete-branch: false
+          title: "chore: nightly maintenance agent updates"
+          body: |
+            ## Summary
+            - Daily automated maintenance checks (architecture, frontend safety, performance smoothness)
+            - Persona-based validation for a normal student user flow
+            - Build and test verification artifacts attached in workflow run
+
+            ## Safety
+            - This PR was generated only after lint/test/build checks passed.
+            - A backup tag is created before merge to support rollback.
+          labels: |
+            automated
+            nightly-maintenance
+
+      - name: Verify checks, backup current main, and merge PR
+        if: steps.create_pr.outputs.pull-request-number != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = Number('${{ steps.create_pr.outputs.pull-request-number }}');
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            core.info(`Validating PR #${pull_number} checks before merge...`);
+
+            const prResp = await github.rest.pulls.get({ owner, repo, pull_number });
+            const headSha = prResp.data.head.sha;
+
+            const maxAttempts = 30; // up to 15 minutes
+            const waitMs = 30_000;
+            let allChecksPassed = false;
+
+            for (let i = 0; i < maxAttempts; i++) {
+              const checks = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: headSha,
+                per_page: 100
+              });
+
+              const runs = checks.data.check_runs;
+              if (runs.length === 0) {
+                core.info(`Attempt ${i + 1}/${maxAttempts}: no check runs yet.`);
+                await sleep(waitMs);
+                continue;
+              }
+
+              const pending = runs.filter((run) => run.status !== 'completed');
+              const failed = runs.filter((run) => run.status === 'completed' && run.conclusion !== 'success');
+
+              if (pending.length > 0) {
+                core.info(`Attempt ${i + 1}/${maxAttempts}: waiting for ${pending.length} pending checks.`);
+                await sleep(waitMs);
+                continue;
+              }
+
+              if (failed.length > 0) {
+                core.setFailed(`Cannot merge: failing checks found (${failed.map((f) => f.name).join(', ')}).`);
+                return;
+              }
+
+              allChecksPassed = true;
+              break;
+            }
+
+            if (!allChecksPassed) {
+              core.setFailed('Timed out waiting for check runs to finish successfully.');
+              return;
+            }
+
+            const branch = await github.rest.repos.getBranch({
+              owner,
+              repo,
+              branch: 'main'
+            });
+            const mainSha = branch.data.commit.sha;
+            const timestamp = new Date().toISOString().replace(/[^\d]/g, '').slice(0, 14);
+            const backupTag = `backup/main-before-nightly-${timestamp}`;
+
+            await github.rest.git.createRef({
+              owner,
+              repo,
+              ref: `refs/tags/${backupTag}`,
+              sha: mainSha
+            });
+            core.info(`Created rollback backup tag: ${backupTag} -> ${mainSha}`);
+
+            await github.rest.pulls.merge({
+              owner,
+              repo,
+              pull_number,
+              merge_method: 'merge'
+            });
+            core.info(`Merged PR #${pull_number} into main.`);

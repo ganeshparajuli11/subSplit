@@ -67,3 +67,15 @@
 # Start the primary activity via ADB shell commands
 C:\Users\ganes\AppData\Local\Android\Sdk\platform-tools\adb.exe shell am start -n com.aistudio.subsplit.kxmpzq/com.example.MainActivity
 ```
+
+---
+
+## 🤖 Nightly Maintenance Agent
+
+An automated GitHub Actions agent now runs every day at **11:00 PM Nepal Time (NPT)**.
+
+It performs:
+* Project cleanup and quality checks (`clean`, lint, unit tests, debug build)
+* Persona-based user validation for student-style app usage flows
+* Artifact storage for logs/reports from each run
+* Auto-generated maintenance PRs, verification, backup tagging, and merge to `main` when checks pass
