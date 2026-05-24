@@ -46,8 +46,8 @@ sealed class AppRoute {
 enum class MainTab {
     DASHBOARD,
     SUBSCRIPTIONS,
-    LISTS,
-    GROUPS,
+    GROCERY,
+    CHORES,
     PROFILE
 }
 
@@ -257,17 +257,17 @@ fun MainLayoutContainer(
                 )
 
                 NavigationBarItem(
-                    selected = selectedTab == MainTab.LISTS,
-                    onClick = { onTabSelected(MainTab.LISTS) },
-                    icon = { Icon(Icons.Default.FormatListBulleted, contentDescription = "Lists") },
-                    label = { Text("Lists", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    selected = selectedTab == MainTab.GROCERY,
+                    onClick = { onTabSelected(MainTab.GROCERY) },
+                    icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Grocery") },
+                    label = { Text("Grocery", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                 )
 
                 NavigationBarItem(
-                    selected = selectedTab == MainTab.GROUPS,
-                    onClick = { onTabSelected(MainTab.GROUPS) },
-                    icon = { Icon(Icons.Default.People, contentDescription = "Groups") },
-                    label = { Text("Groups", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                    selected = selectedTab == MainTab.CHORES,
+                    onClick = { onTabSelected(MainTab.CHORES) },
+                    icon = { Icon(Icons.Default.Assignment, contentDescription = "Chores") },
+                    label = { Text("Chores", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                 )
 
                 NavigationBarItem(
@@ -304,16 +304,14 @@ fun MainLayoutContainer(
                         onNavigateToDetails = onNavigateToDetails
                     )
                 }
-                MainTab.LISTS -> {
+                MainTab.GROCERY -> {
                     ListsScreen(
                         viewModel = viewModel
                     )
                 }
-                MainTab.GROUPS -> {
-                    GroupsScreen(
-                        viewModel = viewModel,
-                        onNavigateToGroupDetails = onNavigateToGroupDetails,
-                        onNavigateToAddGroup = onNavigateToAddGroup
+                MainTab.CHORES -> {
+                    ChoresScreen(
+                        viewModel = viewModel
                     )
                 }
                 MainTab.PROFILE -> {

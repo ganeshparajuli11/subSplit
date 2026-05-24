@@ -27,6 +27,9 @@ import com.example.model.Notification
 import com.example.model.CostSavingAdvice
 import com.example.viewmodel.SubSplitViewModel
 import kotlinx.coroutines.flow.map
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -169,6 +172,83 @@ fun DashboardScreen(
                             color = com.example.ui.theme.BentoTealPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
+                    }
+                }
+            }
+
+            // Prominent Group & Roommate Setup Card (New user friendly connection center)
+            item {
+                var showGroupSetupDialog by remember { mutableStateOf(false) }
+                
+                if (showGroupSetupDialog) {
+                    GroupSetupDialog(
+                        viewModel = viewModel,
+                        onDismiss = { showGroupSetupDialog = false }
+                    )
+                }
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showGroupSetupDialog = true }
+                        .testTag("dashboard_group_setup_card"),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(18.dp)
+                            .fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFE8F5E9)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Groups,
+                                    contentDescription = "Roommates",
+                                    tint = Color(0xFF2E7D32),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Manage Household Group",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = com.example.ui.theme.BentoTextPrimary
+                                )
+                                Text(
+                                    text = "Add new roommates & connect accounts instantly",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                        
+                        Button(
+                            onClick = { showGroupSetupDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFE8F5E9),
+                                contentColor = Color(0xFF2E7D32)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("Manage", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -1116,5 +1196,165 @@ fun DashboardTimelineRow(
             style = MaterialTheme.typography.bodyMedium,
             color = if (item.isSubscription) com.example.ui.theme.BentoTextPrimary else MaterialTheme.colorScheme.primary
         )
+    }
+}
+
+@Composable
+fun GroupSetupDialog(
+    viewModel: SubSplitViewModel,
+    onDismiss: () -> Unit
+) {
+    val groups by viewModel.groups.collectAsState()
+    val activeGroup = groups.firstOrNull() // Roommates Circle
+    val context = LocalContext.current
+    var newRoommateName by remember { mutableStateOf("") }
+    var newRoommateEmail by remember { mutableStateOf("") }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Household Roommates",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = com.example.ui.theme.BentoTextPrimary
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = com.example.ui.theme.BentoTextPrimary)
+                    }
+                }
+
+                Text(
+                    text = "Add your roommates by name and email. Everyone added will automatically show up inside your split suggestions!",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+
+                HorizontalDivider(color = com.example.ui.theme.BentoBg)
+
+                // List of current roommates
+                Text(
+                    text = "Active Roommates in Circle:",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = com.example.ui.theme.BentoTextPrimary
+                )
+
+                val members = activeGroup?.members ?: emptyList()
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Always show Bishal (you)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(
+                                modifier = Modifier.size(28.dp).clip(CircleShape).background(com.example.ui.theme.BentoTealLight),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("B", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = com.example.ui.theme.BentoTealPrimary)
+                            }
+                            Text("Bishal (You)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium, color = com.example.ui.theme.BentoTextPrimary)
+                        }
+                        Text("Owner", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                    }
+
+                    members.filter { it.userId != "user-bishal" }.forEach { member ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Box(
+                                    modifier = Modifier.size(28.dp).clip(CircleShape).background(com.example.ui.theme.BentoBg),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(member.name.take(1), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = com.example.ui.theme.BentoTextPrimary)
+                                }
+                                Text(member.name, style = MaterialTheme.typography.bodyMedium, color = com.example.ui.theme.BentoTextPrimary)
+                            }
+                            Text("Roommate", fontSize = 11.sp, color = Color.Gray)
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = com.example.ui.theme.BentoBg)
+
+                // Add Roommate Inputs
+                Text(
+                    text = "Add New Friend / Roommate:",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = com.example.ui.theme.BentoTextPrimary
+                )
+
+                OutlinedTextField(
+                    value = newRoommateName,
+                    onValueChange = { newRoommateName = it },
+                    placeholder = { Text("Friend's Full Name (e.g. Ram)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                        unfocusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                        focusedContainerColor = com.example.ui.theme.BentoBg,
+                        unfocusedContainerColor = com.example.ui.theme.BentoBg
+                    )
+                )
+
+                OutlinedTextField(
+                    value = newRoommateEmail,
+                    onValueChange = { newRoommateEmail = it },
+                    placeholder = { Text("Email (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                        unfocusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                        focusedContainerColor = com.example.ui.theme.BentoBg,
+                        unfocusedContainerColor = com.example.ui.theme.BentoBg
+                    )
+                )
+
+                Button(
+                    onClick = {
+                        if (newRoommateName.isBlank()) {
+                            Toast.makeText(context, "Please enter roommate's name", Toast.LENGTH_SHORT).show()
+                            return@Button
+                        }
+                        if (activeGroup != null) {
+                            val email = if (newRoommateEmail.isBlank()) "${newRoommateName.lowercase()}@example.com" else newRoommateEmail
+                            viewModel.addGroupMember(activeGroup.id, newRoommateName, email)
+                            Toast.makeText(context, "Added $newRoommateName to household group! 👥", Toast.LENGTH_SHORT).show()
+                            newRoommateName = ""
+                            newRoommateEmail = ""
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.BentoTealPrimary)
+                ) {
+                    Icon(Icons.Default.PersonAdd, contentDescription = "Add")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Add Roommate", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 }
