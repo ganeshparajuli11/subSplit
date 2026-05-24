@@ -188,8 +188,10 @@ jobs:
       - name: 📂 Archive Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          name: release-artifacts
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
 
       # Step 4: Create Automatic Tag and GitHub Release
       - name: 🏷️ Dynamic Version Tagging
@@ -218,9 +220,10 @@ jobs:
             - **Verified by AI Verification Agent**: ✅ Successful
             
             ### 📦 Artifacts Attached
-            - Compiled and optimized production APK direct download below.
+            - Compiled and optimized production APK and App Bundle (AAB) direct download below.
           files: |
-            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
           draft: false
           prerelease: false
         env:
