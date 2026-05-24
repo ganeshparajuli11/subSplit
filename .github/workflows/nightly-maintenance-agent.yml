@@ -56,8 +56,11 @@ jobs:
         run: |
           set -euo pipefail
           ./gradlew testDebugUnitTest --no-daemon | tee nightly-reports/persona-simulation.log
-          grep -R "com.example.ExampleRobolectricTest" app/build/test-results/testDebugUnitTest
-          grep -R "com.example.GreetingScreenshotTest" app/build/test-results/testDebugUnitTest
+          test_results_dir="app/build/test-results/testDebugUnitTest"
+          [ -d "$test_results_dir" ]
+          find "$test_results_dir" -name "*.xml" | tee nightly-reports/persona-test-result-files.log
+          grep -R "com.example.ExampleRobolectricTest" "$test_results_dir"
+          grep -R "com.example.GreetingScreenshotTest" "$test_results_dir"
 
       - name: Upload workflow verification artifacts
         if: always()
