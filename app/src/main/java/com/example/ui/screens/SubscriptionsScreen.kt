@@ -709,7 +709,8 @@ fun SubscriptionHubCard(
                             text = subscription.name,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold,
-                            color = com.example.ui.theme.BentoTextPrimary
+                            color = com.example.ui.theme.BentoTextPrimary,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Box(

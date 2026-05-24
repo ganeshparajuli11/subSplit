@@ -3,6 +3,7 @@ package com.example
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -72,6 +73,15 @@ fun SubSplitApp() {
     val currentRoute = backstack.lastOrNull() ?: AppRoute.Onboarding
 
     var currentTab by remember { mutableStateOf(MainTab.DASHBOARD) }
+
+    // Double-layered back interceptor system to completely prevent accidental app exits
+    BackHandler(enabled = backstack.size > 1 || (currentRoute is AppRoute.MainContainer && currentTab != MainTab.DASHBOARD)) {
+        if (backstack.size > 1) {
+            backstack.removeAt(backstack.lastIndex)
+        } else if (currentRoute is AppRoute.MainContainer && currentTab != MainTab.DASHBOARD) {
+            currentTab = MainTab.DASHBOARD
+        }
+    }
 
     fun navigateTo(route: AppRoute) {
         backstack.add(route)
