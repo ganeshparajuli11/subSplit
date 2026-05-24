@@ -239,12 +239,22 @@ fun SubscriptionsScreen(
                 ) {
                     listOf("All", "Personal", "Shared", "Due soon", "Expensive").forEach { filter ->
                         val isSelected = filter == selectedFilter
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { viewModel.setCategoryFilter(filter) },
-                            label = { Text(filter) },
-                            shape = RoundedCornerShape(20.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) com.example.ui.theme.BentoTealPrimary else Color.White)
+                                .border(1.dp, if (isSelected) Color.Transparent else Color.LightGray.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                .clickable { viewModel.setCategoryFilter(filter) }
+                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = filter,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.White else Color.Gray,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
             }
@@ -709,7 +719,8 @@ fun SubscriptionHubCard(
                             text = subscription.name,
                             style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold,
-                            color = com.example.ui.theme.BentoTextPrimary
+                            color = com.example.ui.theme.BentoTextPrimary,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Box(

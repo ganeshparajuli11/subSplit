@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,21 +28,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
+import com.example.model.HouseChore
 import com.example.viewmodel.SubSplitViewModel
+import com.example.NotificationHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-data class HouseChore(
-    val id: String,
-    val assigneeName: String,
-    val taskTitle: String,
-    val scheduledDay: String,
-    val description: String,
-    val iconResId: Int? = null,
-    var isCompleted: Boolean = false,
-    var completedPhotoResId: Int? = null,
-    var completionTime: String? = null
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,70 +48,108 @@ fun ChoresScreen(viewModel: SubSplitViewModel) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // Default chores list for flat share students
-    val choresList = remember {
-        mutableStateListOf(
-            HouseChore(
-                id = "chore-1",
-                assigneeName = "Bishal",
-                taskTitle = "Deep Kitchen & Toilet Clean",
-                scheduledDay = "Sunday",
-                description = "Scrub kitchen counters, stove stove-top, and deep sanitize toilet bowl & bathroom floor.",
-                isCompleted = false
-            ),
-            HouseChore(
-                id = "chore-2",
-                assigneeName = "Ram",
-                taskTitle = "Deep Hallway & Lounge Clean",
-                scheduledDay = "Tuesday",
-                description = "Vacuum living room rug, mop wooden floors in the hallway, and dust common TV stand.",
-                isCompleted = false
-            ),
-            HouseChore(
-                id = "chore-3",
-                assigneeName = "Sandesh",
-                taskTitle = "Waste Bin Disposal & Sorting",
-                scheduledDay = "Wednesday",
-                description = "Empty recycling and general waste bins to the kerbside curb for Thursday collection.",
-                isCompleted = true,
-                completedPhotoResId = com.example.R.drawable.generic_sub, // Placeholder for verified bin photo
-                completionTime = "Wed 4:32 PM"
-            ),
-            HouseChore(
-                id = "chore-4",
-                assigneeName = "Sujal",
-                taskTitle = "Fridge & Pantry Declutter",
-                scheduledDay = "Friday",
-                description = "Throw away expired roommate items and wipe down internal glass shelves of the shared fridge.",
-                isCompleted = false
-            )
-        )
+    val choresList by viewModel.chores.collectAsState()
+    var selectedChoreForPhoto by remember { mutableStateOf<HouseChore?>(null) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+
+    // Camera capturing using PicturePreview
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap: Bitmap? ->
+        if (bitmap != null) {
+            selectedChoreForPhoto?.let { chore ->
+                val timeString = "Today, " + java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date())
+                viewModel.completeChore(chore.id, bitmap, timeString)
+                Toast.makeText(context, "Chore verified successfully with photo proof! 🎉", Toast.LENGTH_LONG).show()
+                // Trigger a real notification
+                NotificationHelper.showNotification(
+                    context,
+                    "Chore Completed! ✅",
+                    "${chore.assigneeName} has completed and verified the chore: '${chore.taskTitle}'!"
+                )
+            }
+        }
+        selectedChoreForPhoto = null
     }
 
-    var selectedChoreForPhoto by remember { mutableStateOf<HouseChore?>(null) }
-    var showCameraDialog by remember { mutableStateOf(false) }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            cameraLauncher.launch(null)
+        } else {
+            Toast.makeText(context, "Camera permission is required to capture photo proof.", Toast.LENGTH_LONG).show()
+        }
+    }
 
-    if (showCameraDialog && selectedChoreForPhoto != null) {
-        SimulatedCameraDialog(
-            choreTitle = selectedChoreForPhoto!!.taskTitle,
-            onPhotoCaptured = { photoRes ->
-                val updatedIndex = choresList.indexOfFirst { it.id == selectedChoreForPhoto!!.id }
-                if (updatedIndex != -1) {
-                    val current = choresList[updatedIndex]
-                    choresList[updatedIndex] = current.copy(
-                        isCompleted = true,
-                        completedPhotoResId = photoRes,
-                        completionTime = "Today, " + java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date())
-                    )
-                }
-                showCameraDialog = false
-                selectedChoreForPhoto = null
-                Toast.makeText(context, "Chore verified successfully with photo proof! 🎉", Toast.LENGTH_LONG).show()
-            },
-            onDismiss = {
-                showCameraDialog = false
-                selectedChoreForPhoto = null
+    val onMarkComplete: (HouseChore) -> Unit = { chore ->
+        selectedChoreForPhoto = chore
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            cameraLauncher.launch(null)
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // Notification permission launcher
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            NotificationHelper.showNotification(
+                context,
+                "Chore Reminder 🧹",
+                "Hey Bishal, have you cleaned the kitchen and toilet yet?"
+            )
+            NotificationHelper.showNotification(
+                context,
+                "Grocery Reminder 🛒",
+                "Did you buy the 'Bulk Basmati Rice & Red Lentils' yet?"
+            )
+        } else {
+            Toast.makeText(context, "Notification permission denied.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val onTriggerTestNotifications = {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                NotificationHelper.showNotification(
+                    context,
+                    "Chore Reminder 🧹",
+                    "Hey Bishal, have you cleaned the kitchen and toilet yet?"
+                )
+                NotificationHelper.showNotification(
+                    context,
+                    "Grocery Reminder 🛒",
+                    "Did you buy the 'Bulk Basmati Rice & Red Lentils' yet?"
+                )
+            } else {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
+        } else {
+            NotificationHelper.showNotification(
+                context,
+                "Chore Reminder 🧹",
+                "Hey Bishal, have you cleaned the kitchen and toilet yet?"
+            )
+            NotificationHelper.showNotification(
+                context,
+                "Grocery Reminder 🛒",
+                "Did you buy the 'Bulk Basmati Rice & Red Lentils' yet?"
+            )
+        }
+    }
+
+    // Roster creation dialog
+    if (showCreateDialog) {
+        CreateChoreDialog(
+            onChoreCreated = { newChore ->
+                viewModel.addChore(newChore)
+                showCreateDialog = false
+                Toast.makeText(context, "Added new chore to roster! 🧹", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showCreateDialog = false }
         )
     }
 
@@ -128,18 +165,27 @@ fun ChoresScreen(viewModel: SubSplitViewModel) {
                     )
                 },
                 actions = {
-                    IconButton(onClick = {
-                        Toast.makeText(context, "Cleaning statistics up-to-date!", Toast.LENGTH_SHORT).show()
-                    }) {
+                    IconButton(onClick = onTriggerTestNotifications) {
                         Icon(
-                            imageVector = Icons.Default.Insights,
-                            contentDescription = "Insights",
-                            tint = com.example.ui.theme.BentoTextPrimary
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = "Test Reminders",
+                            tint = com.example.ui.theme.BentoTealPrimary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = com.example.ui.theme.BentoBg)
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showCreateDialog = true },
+                containerColor = com.example.ui.theme.BentoTealPrimary,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.padding(bottom = 16.dp).testTag("chores_add_fab")
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Chore")
+            }
         }
     ) { innerPadding ->
         LazyColumn(
@@ -148,73 +194,73 @@ fun ChoresScreen(viewModel: SubSplitViewModel) {
                 .background(com.example.ui.theme.BentoBg)
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Roster Info Banner Card (Premium bento)
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(18.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(com.example.ui.theme.BentoTealLight),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.HomeWork,
-                                contentDescription = "Roster",
-                                tint = com.example.ui.theme.BentoTealPrimary,
-                                modifier = Modifier.size(24.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(com.example.ui.theme.BentoTealLight),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HomeWork,
+                                    contentDescription = "Roster",
+                                    tint = com.example.ui.theme.BentoTealPrimary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Cleaning Roster",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = com.example.ui.theme.BentoTextPrimary
+                                )
+                                Text(
+                                    text = "Coordinating with roommates",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray
+                                )
+                            }
                         }
-                        Column {
-                            Text(
-                                text = "Weekly Cleaning Roster",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = com.example.ui.theme.BentoTextPrimary
-                            )
-                            Text(
-                                text = "Shared apartment duty checklist. Snap a verified photo to mark your clean-ups as completed!",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray,
-                                lineHeight = 16.sp
-                            )
-                        }
+                        Text(
+                            text = "Track shared chores, set schedules, and verify with photo proof upon completion to keep the flat tidy!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            lineHeight = 20.sp
+                        )
                     }
                 }
             }
 
-            // Separator Header
-            item {
-                Text(
-                    text = "Duty Checklist",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    color = com.example.ui.theme.BentoTextPrimary,
-                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
-                )
-            }
+            // Chores roster listings (Uncompleted first, My Job prioritized)
+            val sortedList = choresList.sortedWith(
+                compareBy<HouseChore> { it.isCompleted }
+                    .thenByDescending { it.assigneeName == "Bishal" }
+            )
 
-            // Chores roster listings
-            items(choresList) { chore ->
+            items(sortedList) { chore ->
                 ChoreBentoCard(
                     chore = chore,
-                    onMarkComplete = {
-                        selectedChoreForPhoto = chore
-                        showCameraDialog = true
-                    }
+                    onMarkComplete = { onMarkComplete(chore) }
                 )
             }
         }
@@ -223,16 +269,81 @@ fun ChoresScreen(viewModel: SubSplitViewModel) {
 
 @Composable
 fun ChoreBentoCard(chore: HouseChore, onMarkComplete: () -> Unit) {
+    val isMyJob = chore.assigneeName == "Bishal"
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("chore_card_${chore.id}"),
+            .testTag("chore_card_${chore.id}")
+            .then(
+                if (isMyJob && !chore.isCompleted) {
+                    Modifier.border(1.5.dp, com.example.ui.theme.BentoTealPrimary, RoundedCornerShape(20.dp))
+                } else Modifier
+            ),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isMyJob && !chore.isCompleted) Color(0xFFF1F8E9) else Color.White
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            // Top Row - Assignee avatar badge and scheduled day
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header: Assignee Info
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when (chore.assigneeName) {
+                                "Bishal" -> com.example.ui.theme.BentoTealPrimary
+                                "Ram" -> Color(0xFFBBDEFB)
+                                "Sandesh" -> Color(0xFFFFE0B2)
+                                else -> Color(0xFFE1BEE7)
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = chore.assigneeName.take(1),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (chore.assigneeName == "Bishal") Color.White else Color.DarkGray
+                    )
+                }
+                Text(
+                    text = if (isMyJob) "You (Bishal)" else chore.assigneeName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = com.example.ui.theme.BentoTextPrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Chore Title & Description
+            Text(
+                text = chore.taskTitle,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = com.example.ui.theme.BentoTextPrimary
+            )
+            if (chore.description.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = chore.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray,
+                    lineHeight = 18.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Schedule info
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -240,82 +351,28 @@ fun ChoreBentoCard(chore: HouseChore, onMarkComplete: () -> Unit) {
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(
-                                when (chore.assigneeName) {
-                                    "Bishal" -> Color(0xFFE8F5E9)
-                                    "Ram" -> Color(0xFFE3F2FD)
-                                    "Sandesh" -> Color(0xFFFFF3E0)
-                                    else -> Color(0xFFF3E5F5)
-                                }
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = chore.assigneeName.take(1),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = when (chore.assigneeName) {
-                                "Bishal" -> Color(0xFF2E7D32)
-                                "Ram" -> Color(0xFF1565C0)
-                                "Sandesh" -> Color(0xFFE65100)
-                                else -> Color(0xFF6A1B9A)
-                            }
-                        )
-                    }
-                    Text(
-                        text = chore.assigneeName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = com.example.ui.theme.BentoTextPrimary
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = "Schedule",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(12.dp)
                     )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            if (chore.isCompleted) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
-                        )
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
+                    val timeString = if (chore.timeOfDay == "Anytime" || chore.timeOfDay.isBlank()) "" else " • ${chore.timeOfDay}"
                     Text(
-                        text = chore.scheduledDay,
+                        text = "${chore.scheduledDay}$timeString • ${chore.recurringType} Roster",
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (chore.isCompleted) Color(0xFF2E7D32) else Color(0xFFE65100)
+                        color = Color.Gray
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Chore details
-            Text(
-                text = chore.taskTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Black,
-                color = com.example.ui.theme.BentoTextPrimary
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = chore.description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray,
-                lineHeight = 18.sp
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(color = com.example.ui.theme.BentoBg)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Action section
             if (chore.isCompleted) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = Color(0xFFEEEEEE))
+                Spacer(modifier = Modifier.height(12.dp))
+                
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -329,61 +386,74 @@ fun ChoreBentoCard(chore: HouseChore, onMarkComplete: () -> Unit) {
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = "Completed",
                             tint = Color(0xFF2E7D32),
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Column {
                             Text(
                                 text = "Photo Verified",
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF2E7D32)
                             )
                             if (chore.completionTime != null) {
                                 Text(
                                     text = chore.completionTime!!,
-                                    fontSize = 10.sp,
+                                    fontSize = 9.sp,
                                     color = Color.Gray
                                 )
                             }
                         }
                     }
 
-                    // Thumbnail image simulating the uploaded verified picture
+                    // Display the captured photo if available
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(44.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
-                            .background(Color.LightGray)
+                            .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
+                            .background(Color(0xFFF5F5F5)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Image(
-                            painter = painterResource(id = com.example.R.drawable.generic_sub),
-                            contentDescription = "Verified clean",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        if (chore.completedPhotoBitmap != null) {
+                            Image(
+                                bitmap = chore.completedPhotoBitmap!!.asImageBitmap(),
+                                contentDescription = "Verified photo proof",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(id = com.example.R.drawable.generic_sub),
+                                contentDescription = "Placeholder proof",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
                 }
             } else {
+                Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = onMarkComplete,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(12.dp),
+                        .height(38.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = com.example.ui.theme.BentoTealPrimary,
-                        contentColor = Color.White
-                    )
+                        containerColor = if (isMyJob) com.example.ui.theme.BentoTealPrimary else Color(0xFFF5F5F5),
+                        contentColor = if (isMyJob) Color.White else Color.DarkGray
+                    ),
+                    contentPadding = PaddingValues(0.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.PhotoCamera,
-                        contentDescription = "Verify Clean",
-                        modifier = Modifier.size(18.dp)
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Mark Done with Photo",
+                        text = if (isMyJob) "Verify with Photo" else "Verify for Roommate",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -392,135 +462,265 @@ fun ChoreBentoCard(chore: HouseChore, onMarkComplete: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SimulatedCameraDialog(
-    choreTitle: String,
-    onPhotoCaptured: (Int) -> Unit,
+fun CreateChoreDialog(
+    onChoreCreated: (HouseChore) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var isCapturing by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
+    var title by remember { mutableStateOf("") }
+    var assignee by remember { mutableStateOf("Bishal") }
+    var day by remember { mutableStateOf("Monday") }
+    var time by remember { mutableStateOf("Anytime") }
+    val priority = "Medium"
+    var recurrence by remember { mutableStateOf("Weekly") }
+    var desc by remember { mutableStateOf("") }
+
+    val assignees = listOf("Bishal", "Ram", "Sandesh", "Sujal", "Pratham")
+    val days = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+    val times = listOf("Anytime", "Morning", "Afternoon", "Evening", "Night")
+    val recurrences = listOf("Daily", "Weekly", "Bi-weekly")
+
+    var assigneeDropdownExpanded by remember { mutableStateOf(false) }
+    var dayDropdownExpanded by remember { mutableStateOf(false) }
+    var timeDropdownExpanded by remember { mutableStateOf(false) }
+    var recurrenceDropdownExpanded by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(vertical = 16.dp),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)) // Dark mode camera look
+            colors = CardDefaults.cardColors(containerColor = Color.White)
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Verify Cleaning",
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        fontSize = 18.sp
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = Color.White
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Snap a photo of the completed \"$choreTitle\" task to verify the clean-up.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.LightGray,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-
-                // Simulated Viewfinder Box
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(2.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                        .background(Color.Black),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isCapturing) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            CircularProgressIndicator(color = com.example.ui.theme.BentoTealPrimary)
-                            Text("Processing clean-up proof...", color = Color.White, fontSize = 12.sp)
-                        }
-                    } else {
-                        // Simulated room clean preview image using existing app assets
-                        Image(
-                            painter = painterResource(id = com.example.R.drawable.generic_sub),
-                            contentDescription = "Live Viewfinder Clean Room",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(16.dp))
-                        )
-                        // Camera overlay guides
-                        Box(
-                            modifier = Modifier
-                                .size(160.dp)
-                                .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        )
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "📸 CAMERA PREVIEW - SPARKLING CLEAN ROOM",
-                            color = Color.White,
+                            text = "Add Roster Chore",
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 8.dp)
-                                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                            color = com.example.ui.theme.BentoTextPrimary
                         )
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = com.example.ui.theme.BentoTextPrimary)
+                        }
                     }
                 }
 
-                // Shutter trigger button
-                Button(
-                    onClick = {
-                        isCapturing = true
-                        coroutineScope.launch {
-                            delay(1200) // Simulated capture processing time
-                            onPhotoCaptured(com.example.R.drawable.generic_sub)
-                        }
-                    },
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .border(4.dp, Color(0xFF121212), CircleShape)
-                            .background(Color.White)
+                item {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Task Title (e.g. Clean Lounge Hall)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                            unfocusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                            focusedContainerColor = com.example.ui.theme.BentoBg,
+                            unfocusedContainerColor = com.example.ui.theme.BentoBg
+                        )
                     )
                 }
 
-                Text(
-                    text = "TAP SHUTTER TO CAPTURE",
-                    color = Color.Gray,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                // Dropdowns: Assignee & Scheduled Day
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            ExposedDropdownMenuBox(
+                                expanded = assigneeDropdownExpanded,
+                                onExpandedChange = { assigneeDropdownExpanded = it }
+                            ) {
+                                OutlinedTextField(
+                                    value = assignee,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Assignee") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = assigneeDropdownExpanded) },
+                                    modifier = Modifier.menuAnchor(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                                        unfocusedTextColor = com.example.ui.theme.BentoTextPrimary
+                                    )
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = assigneeDropdownExpanded,
+                                    onDismissRequest = { assigneeDropdownExpanded = false }
+                                ) {
+                                    assignees.forEach { item ->
+                                        DropdownMenuItem(
+                                            text = { Text(item) },
+                                            onClick = {
+                                                assignee = item
+                                                assigneeDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Box(modifier = Modifier.weight(1f)) {
+                            ExposedDropdownMenuBox(
+                                expanded = dayDropdownExpanded,
+                                onExpandedChange = { dayDropdownExpanded = it }
+                            ) {
+                                OutlinedTextField(
+                                    value = day,
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    label = { Text("Day") },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dayDropdownExpanded) },
+                                    modifier = Modifier.menuAnchor(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                                        unfocusedTextColor = com.example.ui.theme.BentoTextPrimary
+                                    )
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = dayDropdownExpanded,
+                                    onDismissRequest = { dayDropdownExpanded = false }
+                                ) {
+                                    days.forEach { item ->
+                                        DropdownMenuItem(
+                                            text = { Text(item) },
+                                            onClick = {
+                                                day = item
+                                                dayDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Dropdown: Time of Day (e.g. Morning, Evening or Anytime)
+                item {
+                    ExposedDropdownMenuBox(
+                        expanded = timeDropdownExpanded,
+                        onExpandedChange = { timeDropdownExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = time,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Time (Optional - default is Anytime)") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = timeDropdownExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                                unfocusedTextColor = com.example.ui.theme.BentoTextPrimary
+                            )
+                        )
+                        ExposedDropdownMenu(
+                            expanded = timeDropdownExpanded,
+                            onDismissRequest = { timeDropdownExpanded = false }
+                        ) {
+                            times.forEach { item ->
+                                DropdownMenuItem(
+                                    text = { Text(item) },
+                                    onClick = {
+                                        time = item
+                                        timeDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Dropdown: Recurrence
+                item {
+                    ExposedDropdownMenuBox(
+                        expanded = recurrenceDropdownExpanded,
+                        onExpandedChange = { recurrenceDropdownExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = recurrence,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Recurrence Roster") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = recurrenceDropdownExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                                  unfocusedTextColor = com.example.ui.theme.BentoTextPrimary
+                            )
+                        )
+                        ExposedDropdownMenu(
+                            expanded = recurrenceDropdownExpanded,
+                            onDismissRequest = { recurrenceDropdownExpanded = false }
+                        ) {
+                            recurrences.forEach { item ->
+                                DropdownMenuItem(
+                                    text = { Text(item) },
+                                    onClick = {
+                                        recurrence = item
+                                        recurrenceDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = desc,
+                        onValueChange = { desc = it },
+                        label = { Text("Task Description & cleaning rules...") },
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                            unfocusedTextColor = com.example.ui.theme.BentoTextPrimary,
+                            focusedContainerColor = com.example.ui.theme.BentoBg,
+                            unfocusedContainerColor = com.example.ui.theme.BentoBg
+                        )
+                    )
+                }
+
+                item {
+                    Button(
+                        onClick = {
+                            if (title.isBlank()) return@Button
+                            val newChore = HouseChore(
+                                id = "chore-" + java.util.UUID.randomUUID().toString().take(6),
+                                assigneeName = assignee,
+                                taskTitle = title,
+                                scheduledDay = day,
+                                description = desc.ifBlank { "Clean designated flat area according to roster duties." },
+                                priority = priority,
+                                timeOfDay = time,
+                                recurringType = recurrence,
+                                isCompleted = false
+                            )
+                            onChoreCreated(newChore)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = com.example.ui.theme.BentoTealPrimary)
+                    ) {
+                        Text("Create Duty Roster", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
             }
         }
     }
 }
+

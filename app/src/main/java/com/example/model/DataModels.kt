@@ -1,6 +1,8 @@
 package com.example.model
 
 import java.util.UUID
+import android.graphics.Bitmap
+
 
 enum class GroupType(val displayName: String) {
     ROOMMATES("Roommates"),
@@ -156,3 +158,19 @@ data class BuyingItem(
     val addedByName: String = "Bishal",
     val createdAt: Long = System.currentTimeMillis()
 )
+
+data class HouseChore(
+    val id: String,
+    val assigneeName: String,
+    val taskTitle: String,
+    val scheduledDay: String,
+    val description: String,
+    val priority: String = "Medium", // High, Medium, Low
+    val timeOfDay: String = "Morning", // Morning, Afternoon, Evening, Night
+    val recurringType: String = "Weekly", // Daily, Weekly, Bi-weekly
+    var isCompleted: Boolean = false,
+    var completedPhotoResId: Int? = null,
+    var completedPhotoBitmap: Bitmap? = null,
+    var completionTime: String? = null
+)
+

@@ -1,9 +1,20 @@
 package com.example
 
 import android.os.Bundle
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import android.Manifest
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
+
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -55,10 +66,52 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        createNotificationChannel()
         setContent {
             MyApplicationTheme {
                 SubSplitApp()
             }
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "SubSplit Reminders"
+            val descriptionText = "Reminders for chores and grocery lists"
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+            val channel = NotificationChannel("subsplit_reminders", name, importance).apply {
+                description = descriptionText
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+}
+
+object NotificationHelper {
+    fun showNotification(context: Context, title: String, message: String) {
+        val channelId = "subsplit_reminders"
+        val notificationId = System.currentTimeMillis().toInt()
+        
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            
+        try {
+            with(NotificationManagerCompat.from(context)) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                        notify(notificationId, builder.build())
+                    }
+                } else {
+                    notify(notificationId, builder.build())
+                }
+            }
+        } catch (e: SecurityException) {
+            e.printStackTrace()
         }
     }
 }
@@ -71,7 +124,24 @@ fun SubSplitApp() {
     val backstack = remember { mutableStateListOf<AppRoute>(AppRoute.Onboarding) }
     val currentRoute = backstack.lastOrNull() ?: AppRoute.Onboarding
 
-    var currentTab by remember { mutableStateOf(MainTab.DASHBOARD) }
+    val tabHistory = remember { mutableStateListOf<MainTab>(MainTab.DASHBOARD) }
+    val currentTab = tabHistory.lastOrNull() ?: MainTab.DASHBOARD
+
+    fun selectTab(tab: MainTab) {
+        if (tabHistory.lastOrNull() != tab) {
+            tabHistory.remove(tab)
+            tabHistory.add(tab)
+        }
+    }
+
+    // Double-layered back interceptor system to completely prevent accidental app exits
+    BackHandler(enabled = backstack.size > 1 || tabHistory.size > 1) {
+        if (backstack.size > 1) {
+            backstack.removeAt(backstack.lastIndex)
+        } else if (tabHistory.size > 1) {
+            tabHistory.removeAt(tabHistory.lastIndex)
+        }
+    }
 
     fun navigateTo(route: AppRoute) {
         backstack.add(route)
@@ -126,7 +196,7 @@ fun SubSplitApp() {
                 MainLayoutContainer(
                     viewModel = viewModel,
                     selectedTab = currentTab,
-                    onTabSelected = { currentTab = it },
+                    onTabSelected = { selectTab(it) },
                     onNavigateToAddSub = { navigateTo(AppRoute.AddSubscription) },
                     onNavigateToAddExpense = { navigateTo(AppRoute.AddExpense) },
                     onNavigateToAddGroup = { navigateTo(AppRoute.AddGroup) },

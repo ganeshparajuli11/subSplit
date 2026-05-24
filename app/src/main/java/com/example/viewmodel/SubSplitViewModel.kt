@@ -18,6 +18,8 @@ class SubSplitViewModel : ViewModel() {
     val settlements = SubSplitRepository.settlements
     val notifications = SubSplitRepository.notifications
     val buyingItems = SubSplitRepository.buyingItems
+    val chores = SubSplitRepository.chores
+
 
     // Search and Filter variables
     private val _searchQuery = MutableStateFlow("")
@@ -537,6 +539,18 @@ class SubSplitViewModel : ViewModel() {
     fun deleteBuyingItem(id: String) {
         viewModelScope.launch {
             SubSplitRepository.deleteBuyingItem(id)
+        }
+    }
+
+    fun addChore(chore: HouseChore) {
+        viewModelScope.launch {
+            SubSplitRepository.addChore(chore)
+        }
+    }
+
+    fun completeChore(id: String, bitmap: android.graphics.Bitmap?, completionTime: String) {
+        viewModelScope.launch {
+            SubSplitRepository.completeChore(id, bitmap, completionTime)
         }
     }
 }

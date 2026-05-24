@@ -5,6 +5,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
+import android.graphics.Bitmap
+
 
 object SubSplitRepository {
 
@@ -41,6 +43,10 @@ object SubSplitRepository {
 
     private val _buyingItems = MutableStateFlow<List<BuyingItem>>(emptyList())
     val buyingItems: StateFlow<List<BuyingItem>> = _buyingItems.asStateFlow()
+
+    private val _chores = MutableStateFlow<List<HouseChore>>(emptyList())
+    val chores: StateFlow<List<HouseChore>> = _chores.asStateFlow()
+
 
     init {
         loadDemoData()
@@ -399,7 +405,58 @@ object SubSplitRepository {
                 isRead = true
             )
         )
+
+        // Default chores list for flat share students
+        _chores.value = listOf(
+            HouseChore(
+                id = "chore-1",
+                assigneeName = "Bishal",
+                taskTitle = "Deep Kitchen & Toilet Clean",
+                scheduledDay = "Sunday",
+                description = "Scrub kitchen counters, stove stove-top, and deep sanitize toilet bowl & bathroom floor.",
+                priority = "High",
+                timeOfDay = "Morning",
+                recurringType = "Weekly",
+                isCompleted = false
+            ),
+            HouseChore(
+                id = "chore-2",
+                assigneeName = "Ram",
+                taskTitle = "Deep Hallway & Lounge Clean",
+                scheduledDay = "Tuesday",
+                description = "Vacuum living room rug, mop wooden floors in the hallway, and dust common TV stand.",
+                priority = "Medium",
+                timeOfDay = "Afternoon",
+                recurringType = "Weekly",
+                isCompleted = false
+            ),
+            HouseChore(
+                id = "chore-3",
+                assigneeName = "Sandesh",
+                taskTitle = "Waste Bin Disposal & Sorting",
+                scheduledDay = "Wednesday",
+                description = "Empty recycling and general waste bins to the kerbside curb for Thursday collection.",
+                priority = "High",
+                timeOfDay = "Night",
+                recurringType = "Weekly",
+                isCompleted = true,
+                completedPhotoResId = com.example.R.drawable.generic_sub, // Placeholder for verified bin photo
+                completionTime = "Wed 4:32 PM"
+            ),
+            HouseChore(
+                id = "chore-4",
+                assigneeName = "Sujal",
+                taskTitle = "Fridge & Pantry Declutter",
+                scheduledDay = "Friday",
+                description = "Throw away expired roommate items and wipe down internal glass shelves of the shared fridge.",
+                priority = "Low",
+                timeOfDay = "Evening",
+                recurringType = "Bi-weekly",
+                isCompleted = false
+            )
+        )
     }
+
 
     // CRUD State Operations
     fun addSubscription(sub: Subscription) {
@@ -607,6 +664,24 @@ object SubSplitRepository {
                 val nextStatus = !it.isBought
                 // If checking off, notify it's ready to buy / got split
                 it.copy(isBought = nextStatus)
+            } else it
+        }
+    }
+
+    fun addChore(chore: HouseChore) {
+        val current = _chores.value.toMutableList()
+        current.add(0, chore)
+        _chores.value = current
+    }
+
+    fun completeChore(id: String, bitmap: Bitmap?, completionTime: String) {
+        _chores.value = _chores.value.map {
+            if (it.id == id) {
+                it.copy(
+                    isCompleted = true,
+                    completedPhotoBitmap = bitmap,
+                    completionTime = completionTime
+                )
             } else it
         }
     }
