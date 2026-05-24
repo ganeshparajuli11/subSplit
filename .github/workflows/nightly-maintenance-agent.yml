@@ -48,11 +48,13 @@ jobs:
 
       - name: Run architecture, frontend safety, and smoothness checks
         run: |
+          set -euo pipefail
           mkdir -p nightly-reports
           ./gradlew clean lintDebug assembleDebug --no-daemon | tee nightly-reports/quality-and-build.log
 
       - name: Run persona-based user simulation checks
         run: |
+          set -euo pipefail
           ./gradlew testDebugUnitTest --no-daemon | tee nightly-reports/persona-simulation.log
           grep -R "com.example.ExampleRobolectricTest" app/build/test-results/testDebugUnitTest
           grep -R "com.example.GreetingScreenshotTest" app/build/test-results/testDebugUnitTest
